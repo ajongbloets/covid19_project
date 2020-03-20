@@ -9,6 +9,17 @@ shiny.parts.dir <- file.path(root.dir, "parts")
 # Data directory
 data.dir <- file.path(root.dir, "data")
 
+## Constants
+
+european <- c(
+  "NL", "DE", "PL",
+  "BE", "LU",
+  "FR", 
+  "ES", "IT", "EL",
+  "NO", "SE", "FI", 
+  "UK"
+)
+
 
 ### GGplot labels
 
