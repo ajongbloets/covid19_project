@@ -38,7 +38,8 @@ si_sd <- 3.4
 
 ```
 
-Last timepoint: `r df.ecdc %>% pull(date_reported) %>% max()`
+* Last **global** timepoint: `r df.ecdc %>% pull(date_reported) %>% max()`
+* Last **dutch** timepoint: `r df.ecdc %>% filter(geo_id == "NL") %>% pull(date_reported) %>% max()`
 
 ```{r}
 f_plot_increase <- function(d) {
@@ -81,6 +82,21 @@ f_plot_cumulative <- function(d) {
     labs(
       x = "Date", y = p.label.log("cumalative #")
     )
+}
+
+f_plot_r_estimate <- function( d ) {
+  
+  d %>%
+    ggplot(aes(x=t_end, y=`Mean(R)` )) +
+    geom_point() +
+    geom_line() +
+    geom_ribbon(aes(ymin = `Quantile.0.025(R)`, ymax = `Quantile.0.975(R)`), alpha=0.1) +
+    expand_limits(y=0) +
+    labs(
+      x = "Time (day)",
+      y = "Estimated R"
+    )
+  
 }
 ```
 
@@ -140,17 +156,66 @@ df.ecdc %>%
   f_plot_cumulative()
 ```
 
+## Estimate R
+
 ```{r}
-r.nl <- df.ecdc %>%
-  filter(geo_id == "NL") %>%
-  arrange(date_reported) %>%
-  filter(new_cases > 0) %>%
-  pull(new_cases) %>%
-  estimate_R(
-    method = "parametric_si", config = make_config(list(mean_si = si_mean, std_si = si_sd))
-  )
+f_estimate_r <- function( .d ) {
+  v <- .d %>%
+    arrange(date_reported) %>%
+    filter(new_cases > 0) %>%
+    pull(new_cases)
+  
+  result <- NA
+  if (length(v) > 7) {
+    
+    result <- suppressMessages(estimate_R(
+      v, method = "parametric_si", config = make_config(list(mean_si = si_mean, std_si = si_sd))
+    ))
+  }
+      
+}
+
+f_extract_r <- function( .m ) {
+  .m$R
+}
 ```
 
 ```{r}
-plot(r.nl, "R")
+df.r <- df.ecdc %>%
+  group_by(country, geo_id) %>%
+  nest() %>%
+  mutate(
+    model = map(data, f_estimate_r),
+    r_estimate = map(model, f_extract_r)
+  ) %>%
+  unnest(r_estimate)
+```
+
+### Global Situation
+
+```{r}
+df.ecdc %>%
+  summarise_ecdc %>%
+  f_estimate_r %>%
+  f_extract_r %>%
+  f_plot_r_estimate
+```
+
+### European Situation
+
+```{r}
+df.ecdc %>%
+  filter(geo_id %in% european) %>%
+  summarise_ecdc %>%
+  f_estimate_r %>%
+  f_extract_r %>%
+  f_plot_r_estimate
+```
+
+### Dutch Situation
+
+```{r}
+df.r %>%
+  filter(geo_id == "NL") %>% 
+  f_plot_r_estimate
 ```
