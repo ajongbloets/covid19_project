@@ -1,0 +1,143 @@
+---
+title: "ECDC COVID-19 Data"
+author: "Joeri Jongbloets"
+date: "`r strftime(Sys.Date(), '%B %d %Y')`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE, warning=FALSE
+  
+)
+
+library("EpiEstim")
+library("tidyverse")
+```
+
+```{r load_data, include=FALSE}
+# Load project settings
+source(here::here("settings.R"))
+
+# load data
+source(file.path(data.dir, "ecdc.R"))
+
+df.ecdc <- load_ecdc()
+
+european <- c(
+  "NL", "DE", "PL",
+  "BE", "LU",
+  "FR", 
+  "ES", "IT", "EL",
+  "NO", "SE", "FI", 
+  "UK"
+)
+
+si_mean <- 5
+si_sd <- 3.4
+
+```
+
+Last timepoint: `r df.ecdc %>% pull(date_reported) %>% max()`
+
+```{r}
+f_plot_increase <- function(d) {
+  d %>%
+    pivot_longer(
+      cols = c(new_cases, new_deaths),
+      names_to = "variable",
+      names_prefix = "new_",
+      values_to = "value"
+    ) %>%
+    ggplot(aes(x = date_reported, y= value, colour= variable )) +
+    facet_wrap(~variable, scales="free_y") +
+    geom_smooth() +
+    geom_point() +
+    scale_y_log10() +
+    labs(
+      x = "Date", y = p.label.log("new #")
+    )
+}
+
+f_plot_cumulative <- function(d) {
+  d %>%
+    pivot_longer(
+      cols = c(new_cases, new_deaths),
+      names_to = "variable",
+      names_prefix = "new_",
+      values_to = "value"
+    ) %>%
+    group_by(variable) %>%
+    mutate(
+      cum_value = cumsum(value)
+    ) %>%
+    ggplot(aes(x = date_reported, y= cum_value, colour= variable )) +
+    facet_wrap(~variable, scales="free_y") +
+    geom_smooth() +
+    geom_point() +
+    scale_y_log10() +
+    labs(
+      x = "Date", y = p.label.log("cumalative #")
+    )
+}
+```
+
+## Global Situation
+
+```{r}
+df.ecdc %>%
+  summarise_ecdc %>%
+  f_plot_increase()
+```
+
+```{r}
+df.ecdc %>%
+  summarise_ecdc %>%
+  f_plot_cumulative()
+```
+
+## European Situation
+
+```{r}
+df.ecdc %>%
+  filter(geo_id %in% european) %>%
+  summarise_ecdc %>%
+  f_plot_increase()
+```
+
+```{r}
+df.ecdc %>%
+  filter(geo_id %in% european) %>%
+  summarise_ecdc %>%
+  f_plot_cumulative()
+```
+
+## Dutch Situation
+
+```{r}
+df.ecdc %>%
+  filter(geo_id == "NL") %>%
+  summarise_ecdc %>%
+  f_plot_increase()
+```
+
+```{r}
+df.ecdc %>%
+  filter(geo_id == "NL") %>%
+  summarise_ecdc %>%
+  f_plot_cumulative()
+```
+
+```{r}
+r.nl <- df.ecdc %>%
+  filter(geo_id == "NL") %>%
+  arrange(date_reported) %>%
+  pull(new_cases) %>%
+  estimate_R(
+    method = "parametric_si", config = make_config(list(mean_si = si_mean, std_si = si_sd))
+  )
+```
+
+```{r}
+
+```
