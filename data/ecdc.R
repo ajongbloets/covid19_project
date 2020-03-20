@@ -1,7 +1,7 @@
 
 require("readxl")
 
-ecdc.file.pattern <- "^(?:.*/)?([0-9]{8})_ECDC.xls$"
+ecdc.file.pattern <- "^(?:.*/)?([0-9]{8})_ECDC.xlsx?$"
 
 collect_ecdc_files <- function(path = NULL, pattern = NULL) {
   

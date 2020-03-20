@@ -49,6 +49,7 @@ f_plot_increase <- function(d) {
       names_prefix = "new_",
       values_to = "value"
     ) %>%
+    filter( value > 0 ) %>%
     ggplot(aes(x = date_reported, y= value, colour= variable )) +
     facet_wrap(~variable, scales="free_y") +
     geom_smooth() +
@@ -71,6 +72,7 @@ f_plot_cumulative <- function(d) {
     mutate(
       cum_value = cumsum(value)
     ) %>%
+    filter( cum_value > 0 ) %>%
     ggplot(aes(x = date_reported, y= cum_value, colour= variable )) +
     facet_wrap(~variable, scales="free_y") +
     geom_smooth() +
@@ -80,6 +82,16 @@ f_plot_cumulative <- function(d) {
       x = "Date", y = p.label.log("cumalative #")
     )
 }
+```
+
+```{r}
+df.ecdc %>%
+  group_by(country) %>%
+  summarise(
+    last_report_date = max(date_reported)
+  ) %>%
+  ggplot(aes(last_report_date)) +
+  geom_histogram()
 ```
 
 ## Global Situation
@@ -132,6 +144,7 @@ df.ecdc %>%
 r.nl <- df.ecdc %>%
   filter(geo_id == "NL") %>%
   arrange(date_reported) %>%
+  filter(new_cases > 0) %>%
   pull(new_cases) %>%
   estimate_R(
     method = "parametric_si", config = make_config(list(mean_si = si_mean, std_si = si_sd))
@@ -139,5 +152,5 @@ r.nl <- df.ecdc %>%
 ```
 
 ```{r}
-
+plot(r.nl, "R")
 ```
