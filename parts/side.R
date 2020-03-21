@@ -19,6 +19,21 @@ side.show.variable <- p(
   
 )
 
+side.si.parameters <- p(
+  sliderInput(
+    "si_mean",
+    "Average Incubation Time (days)",
+    min = 0, max = 14, step = 0.1,
+    value = 5
+  ),
+  sliderInput(
+    "si_sd",
+    "St.Dev. Incubation Time (days)",
+    min = 0, max = 14, step = 0.1,
+    value = 3.4
+  )
+)
+
 side.select.territory <- p(
   selectInput(
     "territory", 

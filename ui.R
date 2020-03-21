@@ -20,6 +20,8 @@ shinyUI(fluidPage(
     sidebarPanel(
       side.show.variable,
       hr(),
+      side.si.parameters,
+      hr(),
       side.select.territory,
       side.summarise.data,
       hr(),

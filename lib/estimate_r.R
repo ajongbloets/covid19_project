@@ -1,5 +1,5 @@
 
-f_estimate_r <- function( df.data, variable  ) {
+f_estimate_r <- function( df.data, variable, si_mean = 5, si_sd = 3.4  ) {
   cases <- df.data %>%
     arrange(date_reported) %>%
     filter(!! variable > 0) %>%

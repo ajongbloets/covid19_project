@@ -19,6 +19,7 @@ shinyServer(function(input, output, session) {
   # xlim.zoom <- reactive({
   #   input$time.filter.zoom == TRUE
   # })
+
   
   ## Reactive variable selection
   plot.variable <- reactive({
@@ -95,7 +96,10 @@ shinyServer(function(input, output, session) {
   
   output$plot.overview.cum <- renderPlot({
     
-    df.data() %>%
+    d <- df.data()
+    v <- plot.variable()
+    
+    d %>%
       summarise_ecdc %>%
       pivot_longer(
         cols = c(new_cases, new_deaths),
@@ -107,6 +111,7 @@ shinyServer(function(input, output, session) {
       mutate(
         cum_value = cumsum(value)
       ) %>%
+      filter( variable %in% v ) %>%
       ggplot(aes(x = date_reported, y = cum_value, colour = variable)) +
       facet_wrap(~variable, scales = "free") +
       geom_line() +
@@ -121,9 +126,12 @@ shinyServer(function(input, output, session) {
   
   output$plot.overview.r <- renderPlot({
     
+    si_mean <- input$si_mean
+    si_sd <- input$si_sd
+    
     df.data() %>%
       summarise_ecdc %>%
-      f_estimate_r(variable = "new_cases") %>%
+      f_estimate_r(variable = "new_cases", si_mean = si_mean, si_sd = si_sd) %>%
       f_extract_r %>%
       ggplot(aes(x=t_end, y=`Mean(R)` )) +
       geom_point() +

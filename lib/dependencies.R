@@ -4,5 +4,5 @@
 # Author: Hugo Pineda <hugo.pinedahernandez@student.uva.nl>
 #
 
-# load all 
+require("EpiEstim")
 require("tidyverse")
