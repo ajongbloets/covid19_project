@@ -34,11 +34,18 @@ shinyServer(function(input, output, session) {
   ## Reactive territory
   plot.territory <- reactive({
     
-    v <- input$territory
+    result <- str_to_lower(input$data.view)
     
-    validate(need(length(v) > 0, "Select a territory"))
+    validate(need(length(result) > 0, "Select a data view"))
     
-    v
+    if ( result == "countries" ) {
+      result <- str_to_lower(input$territory)
+        
+      validate(need(length(result) > 0, "Select a territory"))  
+      
+    }
+  
+    result
   })
   
   
@@ -48,15 +55,14 @@ shinyServer(function(input, output, session) {
     result <- data.frame()
     
     selected.territory <- plot.territory()
-    
+
     result <- selected.territory %>%
-      str_to_lower() %>%
       switch (
         "global" = df.ecdc,
         "european" = df.ecdc %>%
           filter(geo_id %in% european),
         df.ecdc %>%
-          filter(country %in% selected.territory)
+          filter(str_to_lower(country) %in% selected.territory)
       )
     
     validate(need(nrow(result) > 0, "No data to show"))
@@ -148,11 +154,15 @@ shinyServer(function(input, output, session) {
   
   output$summary <- renderText({
     
+    territory <- plot.territory()
+    
     last_report <- df.data() %>%
       pull(date_reported) %>%
       max()
     
-    glue::glue("<p>Last report from: <i>{last_report}</i></p>")
+    glue::glue(
+      "<p>Showing data for <b>{territory}</b> with last report from: <b>{last_report}</b></p>"
+    )
   })
   
   output$version <- renderText({

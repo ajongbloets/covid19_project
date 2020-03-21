@@ -22,6 +22,7 @@ shinyUI(fluidPage(
       hr(),
       side.si.parameters,
       hr(),
+      side.select.view,
       side.select.territory,
       side.summarise.data,
       hr(),

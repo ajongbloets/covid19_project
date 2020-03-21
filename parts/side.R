@@ -34,12 +34,22 @@ side.si.parameters <- p(
   )
 )
 
+side.select.view <- p(
+  selectInput(
+    "data.view", 
+    "Select what to show:",
+    choices = c("Global", "European", "Countries"),
+    selected = "Global",
+    multiple = FALSE
+  )
+)
+
 side.select.territory <- p(
   selectInput(
     "territory", 
     "Select Countries to show:",
-    choices = c("Global", "European", unique(df.ecdc$country)),
-    selected = "Global",
+    choices = unique(df.ecdc$country),
+    selected = "Netherlands",
     multiple = TRUE
   )
 )
