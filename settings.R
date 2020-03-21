@@ -12,12 +12,14 @@ data.dir <- file.path(root.dir, "data")
 ## Constants
 
 european <- c(
+  "UK", "NO",
+  "SE", "FI",
+  "DK", "EE", "LV", "LT",
   "NL", "DE", "PL",
-  "BE", "LU",
-  "FR", 
-  "ES", "IT", "EL",
-  "NO", "SE", "FI", 
-  "UK"
+  "BE", "LU", "CZ", "SK",
+  "FR", "CH", "AU", "HU", "RO",
+  "PT", "ES", "IT", "SI", "HR", "BG", "EL",
+  "MT", "CY"
 )
 
 

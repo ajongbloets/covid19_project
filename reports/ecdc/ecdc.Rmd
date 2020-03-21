@@ -24,15 +24,6 @@ source(file.path(data.dir, "ecdc.R"))
 
 df.ecdc <- load_ecdc()
 
-european <- c(
-  "NL", "DE", "PL",
-  "BE", "LU",
-  "FR", 
-  "ES", "IT", "EL",
-  "NO", "SE", "FI", 
-  "UK"
-)
-
 si_mean <- 5
 si_sd <- 3.4
 
@@ -53,11 +44,11 @@ f_plot_increase <- function(d) {
     filter( value > 0 ) %>%
     ggplot(aes(x = date_reported, y= value, colour= variable )) +
     facet_wrap(~variable, scales="free_y") +
-    geom_smooth() +
+    geom_smooth(se=F) +
     geom_point() +
     scale_y_log10() +
     labs(
-      x = "Date", y = p.label.log("new #")
+      x = "Date", y = "new #"
     )
 }
 
@@ -76,11 +67,11 @@ f_plot_cumulative <- function(d) {
     filter( cum_value > 0 ) %>%
     ggplot(aes(x = date_reported, y= cum_value, colour= variable )) +
     facet_wrap(~variable, scales="free_y") +
-    geom_smooth() +
+    geom_smooth(se=F) +
     geom_point() +
     scale_y_log10() +
     labs(
-      x = "Date", y = p.label.log("cumalative #")
+      x = "Date", y = "cumalative #"
     )
 }
 
@@ -88,9 +79,10 @@ f_plot_r_estimate <- function( d ) {
   
   d %>%
     ggplot(aes(x=t_end, y=`Mean(R)` )) +
-    geom_point() +
-    geom_line() +
-    geom_ribbon(aes(ymin = `Quantile.0.025(R)`, ymax = `Quantile.0.975(R)`), alpha=0.1) +
+    geom_point(aes(colour = geo_id)) +
+    geom_line(aes(colour = geo_id)) +
+    geom_ribbon(aes(ymin = `Quantile.0.025(R)`, ymax = `Quantile.0.975(R)`, fill = geo_id), alpha=0.1) +
+    geom_hline(aes(yintercept = 1), colour="red") +
     expand_limits(y=0) +
     labs(
       x = "Time (day)",
@@ -110,7 +102,9 @@ df.ecdc %>%
   geom_histogram()
 ```
 
-## Global Situation
+## Cases per Day
+
+### Global Situation
 
 ```{r}
 df.ecdc %>%
@@ -124,7 +118,7 @@ df.ecdc %>%
   f_plot_cumulative()
 ```
 
-## European Situation
+### European Situation
 
 ```{r}
 df.ecdc %>%
@@ -136,11 +130,34 @@ df.ecdc %>%
 ```{r}
 df.ecdc %>%
   filter(geo_id %in% european) %>%
+  summarise_ecdc() %>%
+  f_plot_increase()
+```
+
+```{r}
+df.ecdc %>%
+  filter(geo_id %in% european) %>%
   summarise_ecdc %>%
   f_plot_cumulative()
 ```
 
-## Dutch Situation
+### Italian Situation
+
+```{r}
+df.ecdc %>%
+  filter(geo_id == "IT") %>%
+  summarise_ecdc %>%
+  f_plot_increase()
+```
+
+```{r}
+df.ecdc %>%
+  filter(geo_id == "IT") %>%
+  summarise_ecdc %>%
+  f_plot_cumulative()
+```
+
+### Dutch Situation
 
 ```{r}
 df.ecdc %>%
@@ -154,6 +171,79 @@ df.ecdc %>%
   filter(geo_id == "NL") %>%
   summarise_ecdc %>%
   f_plot_cumulative()
+```
+
+### Overlap
+
+```{r}
+df.params <- data.frame(
+  geo_id = c("NL", "IT"),
+  date_start = c( "2020-02-27", "2020-02-21" ),
+  population = c(17424978 ,60549600)
+) %>%
+  mutate(
+    date_start = lubridate::ymd(date_start)
+  )
+```
+
+```{r}
+df.ecdc %>%
+  filter(geo_id %in% c("NL", "IT")) %>%
+  pivot_longer(
+      cols = c(new_cases, new_deaths),
+      names_to = "variable",
+      names_prefix = "new_",
+      values_to = "value"
+    ) %>%
+  left_join(
+    df.params, by = c("geo_id")
+  ) %>%
+  mutate(
+    t_day = as.numeric(difftime(date_reported, date_start, units = "days" )),
+    value_norm = (value / population) * 17424978
+  ) %>%
+  filter( t_day > 0 ) %>%
+  ggplot(aes(x = t_day, y= value_norm, colour= geo_id )) +
+  facet_wrap(~variable, scales="free_y") +
+  geom_smooth(se=F) +
+  geom_point() +
+  scale_y_log10() +
+  labs(
+    x = "Date", y = "Normalized new #"
+  )
+```
+
+```{r}
+df.ecdc %>%
+  filter(geo_id %in% c("NL", "IT")) %>%
+  pivot_longer(
+      cols = c(new_cases, new_deaths),
+      names_to = "variable",
+      names_prefix = "new_",
+      values_to = "value"
+    ) %>%
+  left_join(
+    df.params, by = c("geo_id")
+  ) %>%
+  arrange(date_reported) %>%
+  group_by(geo_id, variable) %>%
+  mutate(
+    cum_value = cumsum(value)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    t_day = as.numeric(difftime(date_reported, date_start, units = "days" )),
+    cum_value_norm = (cum_value / population) * 17424978
+  ) %>%
+  filter( t_day > 0 ) %>%
+  ggplot(aes(x = t_day, y= cum_value_norm, colour= geo_id )) +
+  facet_wrap(~variable, scales="free_y") +
+  geom_smooth(se=F) +
+  geom_point() +
+  scale_y_log10() +
+  labs(
+    x = "Date", y = "Normalized cumalative #"
+  )
 ```
 
 ## Estimate R
@@ -198,6 +288,9 @@ df.ecdc %>%
   summarise_ecdc %>%
   f_estimate_r %>%
   f_extract_r %>%
+  mutate(
+    geo_id = "Global"
+  ) %>%
   f_plot_r_estimate
 ```
 
@@ -209,6 +302,17 @@ df.ecdc %>%
   summarise_ecdc %>%
   f_estimate_r %>%
   f_extract_r %>%
+  mutate(
+    geo_id = "EU"
+  ) %>%
+  f_plot_r_estimate
+```
+
+### Italian Situation
+
+```{r}
+df.r %>%
+  filter(geo_id == "IT") %>% 
   f_plot_r_estimate
 ```
 
@@ -219,3 +323,12 @@ df.r %>%
   filter(geo_id == "NL") %>% 
   f_plot_r_estimate
 ```
+
+### Overlap
+
+```{r}
+df.r %>%
+  filter(geo_id %in% c("IT" , "NL", "SE")) %>% 
+  f_plot_r_estimate
+```
+
