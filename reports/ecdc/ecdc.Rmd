@@ -246,6 +246,65 @@ df.ecdc %>%
   )
 ```
 
+## Death Rate
+
+```{r}
+f_plot_death_rate <- function( .d ) {
+  
+  .d %>%
+    mutate(
+      cum_cases = cumsum(new_cases),
+      cum_deaths = cumsum(new_deaths),
+      death_rate = cum_deaths / cum_cases
+    ) %>%
+    filter(cum_cases > 0, cum_deaths > 0) %>%
+    ggplot(aes(x=date_reported, y=death_rate)) +
+    geom_line() +
+    geom_point() +
+    scale_y_continuous(labels = scales::percent) +
+    labs(
+      x = "Date",
+      y = "Death Rate"
+    )
+  
+}
+```
+
+### Global Situation
+
+```{r}
+df.ecdc %>%
+  summarise_ecdc %>%
+  f_plot_death_rate()
+```
+
+### European Situation
+
+```{r}
+df.ecdc %>%
+  filter(geo_id %in% european) %>%
+  summarise_ecdc %>%
+  f_plot_death_rate()
+```
+
+### Italian Situation
+
+```{r}
+df.ecdc %>%
+  filter(geo_id == "IT" ) %>%
+  summarise_ecdc %>%
+  f_plot_death_rate()
+```
+
+### Dutch Situation
+
+```{r}
+df.ecdc %>%
+  filter(geo_id == "NL") %>%
+  summarise_ecdc %>%
+  f_plot_death_rate()
+```
+
 ## Estimate R
 
 ```{r}
@@ -328,7 +387,7 @@ df.r %>%
 
 ```{r}
 df.r %>%
-  filter(geo_id %in% c("IT" , "NL", "SE")) %>% 
+  filter(geo_id %in% c("IT" , "NL", "DE")) %>% 
   f_plot_r_estimate
 ```
 
