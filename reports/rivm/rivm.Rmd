@@ -81,14 +81,14 @@ f_plot_cumulative <- function(d) {
 f_plot_r_estimate <- function( d ) {
   
   d %>%
-    ggplot(aes(x=t_end, y=`Mean(R)` )) +
+    ggplot(aes(x=t_day, y=`Mean(R)` )) +
     geom_point(aes(colour = metric)) +
     geom_line(aes(colour = metric)) +
     geom_ribbon(aes(ymin = `Quantile.0.025(R)`, ymax = `Quantile.0.975(R)`, fill = metric), alpha=0.1) +
     geom_hline(aes(yintercept = 1), colour="red") +
     expand_limits(y=0) +
     labs(
-      x = "Time (day)",
+      x = "Days before today",
       y = "Estimated R"
     )
   
@@ -138,6 +138,8 @@ df.rivm %>%
   f_plot_death_rate()
 ```
 
+## Estimate R
+
 ```{r}
 df.r <- df.rivm %>%
   pivot_longer(
@@ -148,8 +150,9 @@ df.r <- df.rivm %>%
   ) %>%
   group_by(geo_id, metric) %>%
   nest() %>%
+  group_by(geo_id, metric) %>%
   mutate(
-    model = map(data, f_estimate_r, "value"),
+    model = map(data, f_estimate_r, variable = value, si_mean = si_mean, si_sd = si_sd),
     r_estimate = map(model, f_extract_r)
   ) %>%
   unnest(r_estimate)
@@ -157,19 +160,5 @@ df.r <- df.rivm %>%
 
 ```{r}
 df.r %>%
-  f_plot_r_estimate
-```
-
-```{r}
-df.r %>%
-  f_plot_r_estimate +
-  facet_wrap(~metric, ncol=1)
-```
-
-Last 14 days:
-
-```{r}
-df.r %>%
-  filter(max(t_end) - t_end <= 14) %>%
   f_plot_r_estimate
 ```
