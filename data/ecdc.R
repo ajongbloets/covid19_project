@@ -19,6 +19,22 @@ collect_ecdc_files <- function(path = NULL, pattern = NULL) {
   
 }
 
+download_ecdc_file <- function( .date = NULL ) {
+  
+  if (is.null(.date)) {
+    .date <- Sys.Date()
+  }
+  
+  url <- glue::glue(
+    "https://www.ecdc.europa.eu/sites/default/files/documents/",
+    'COVID-19-geographic-disbtribution-worldwide-{format(.date, "%Y-%m-%d")}.xlsx'
+  )
+  
+  tmp <- tempfile(fileext = ".xlsx")
+  
+  try( httr::GET(url, authenticate(":", ":", type="ntlm"), write_disk(tmp)) )
+}
+
 load_ecdc_file <- function( path, pattern) {
   
   dataset <- sub(pattern, "\\1", path)
@@ -29,6 +45,9 @@ load_ecdc_file <- function( path, pattern) {
     ) %>%
     mutate(
       dataset = lubridate::ymd(dataset)
+    ) %>%
+    filter(
+      new_cases >= 0, new_deaths >= 0
     )
   
 }

@@ -19,6 +19,9 @@ library("tidyverse")
 # Load project settings
 source(here::here("settings.R"))
 
+# load helper functions
+source(file.path(lib.dir, "estimate_r.R"))
+
 # load data
 source(file.path(data.dir, "ecdc.R"))
 
@@ -78,14 +81,14 @@ f_plot_cumulative <- function(d) {
 f_plot_r_estimate <- function( d ) {
   
   d %>%
-    ggplot(aes(x=t_end, y=`Mean(R)` )) +
+    ggplot(aes(x=t_day, y=`Mean(R)` )) +
     geom_point(aes(colour = geo_id)) +
     geom_line(aes(colour = geo_id)) +
     geom_ribbon(aes(ymin = `Quantile.0.025(R)`, ymax = `Quantile.0.975(R)`, fill = geo_id), alpha=0.1) +
     geom_hline(aes(yintercept = 1), colour="red") +
     expand_limits(y=0) +
     labs(
-      x = "Time (day)",
+      x = "Days before today",
       y = "Estimated R"
     )
   
@@ -308,33 +311,11 @@ df.ecdc %>%
 ## Estimate R
 
 ```{r}
-f_estimate_r <- function( .d ) {
-  v <- .d %>%
-    arrange(date_reported) %>%
-    filter(new_cases > 0) %>%
-    pull(new_cases)
-  
-  result <- NA
-  if (length(v) > 7) {
-    
-    result <- suppressMessages(estimate_R(
-      v, method = "parametric_si", config = make_config(list(mean_si = si_mean, std_si = si_sd))
-    ))
-  }
-      
-}
-
-f_extract_r <- function( .m ) {
-  .m$R
-}
-```
-
-```{r}
 df.r <- df.ecdc %>%
   group_by(country, geo_id) %>%
   nest() %>%
   mutate(
-    model = map(data, f_estimate_r),
+    model = map(data, f_estimate_r, variable = new_cases, si_mean = si_mean, si_sd = si_sd),
     r_estimate = map(model, f_extract_r)
   ) %>%
   unnest(r_estimate)
@@ -345,7 +326,7 @@ df.r <- df.ecdc %>%
 ```{r}
 df.ecdc %>%
   summarise_ecdc %>%
-  f_estimate_r %>%
+  f_estimate_r(variable = new_cases, si_mean = si_mean, si_sd = si_sd) %>%
   f_extract_r %>%
   mutate(
     geo_id = "Global"
@@ -359,7 +340,7 @@ df.ecdc %>%
 df.ecdc %>%
   filter(geo_id %in% european) %>%
   summarise_ecdc %>%
-  f_estimate_r %>%
+  f_estimate_r(variable = new_cases, si_mean = si_mean, si_sd = si_sd) %>%
   f_extract_r %>%
   mutate(
     geo_id = "EU"
@@ -387,7 +368,8 @@ df.r %>%
 
 ```{r}
 df.r %>%
+  group_by(geo_id) %>%
   filter(geo_id %in% c("IT" , "NL", "DE")) %>% 
+  filter(max(t_end) - t_end <= 21) %>%
   f_plot_r_estimate
 ```
-
