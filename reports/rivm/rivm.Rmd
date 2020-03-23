@@ -1,0 +1,175 @@
+---
+title: "ECDC COVID-19 Data"
+author: "Joeri Jongbloets"
+date: "`r strftime(Sys.Date(), '%B %d %Y')`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE, warning=FALSE
+  
+)
+
+library("EpiEstim")
+library("tidyverse")
+```
+
+```{r load_data, include=FALSE}
+# Load project settings
+source(here::here("settings.R"))
+
+# load helper functions
+source(file.path(lib.dir, "estimate_r.R"))
+
+# load data
+source(file.path(data.dir, "rivm.R"))
+
+df.rivm <- load_rivm()
+
+si_mean <- 5
+si_sd <- 3.4
+
+```
+
+* Last timepoint: `r df.rivm %>% pull(date_reported) %>% max()`
+
+```{r}
+f_plot_increase <- function(d) {
+  d %>%
+    pivot_longer(
+      cols = starts_with("new_"),
+      names_to = "variable",
+      names_prefix = "new_",
+      values_to = "value"
+    ) %>%
+    filter( value > 0 ) %>%
+    ggplot(aes(x = date_reported, y= value, colour= variable )) +
+    facet_wrap(~variable, scales="free_y") +
+    geom_smooth(se=F) +
+    geom_point() +
+    scale_y_log10() +
+    labs(
+      x = "Date", y = "new #"
+    )
+}
+
+f_plot_cumulative <- function(d) {
+  d %>%
+    pivot_longer(
+      cols = starts_with("new_"),
+      names_to = "variable",
+      names_prefix = "new_",
+      values_to = "value"
+    ) %>%
+    group_by(variable) %>%
+    arrange(date_reported) %>%
+    mutate(
+      cum_value = cumsum(value)
+    ) %>%
+    filter( cum_value > 0 ) %>%
+    ggplot(aes(x = date_reported, y= cum_value, colour= variable )) +
+    facet_wrap(~variable, scales="free_y") +
+    geom_smooth(se=F) +
+    geom_point() +
+    scale_y_log10() +
+    labs(
+      x = "Date", y = "cumalative #"
+    )
+}
+
+f_plot_r_estimate <- function( d ) {
+  
+  d %>%
+    ggplot(aes(x=t_end, y=`Mean(R)` )) +
+    geom_point(aes(colour = metric)) +
+    geom_line(aes(colour = metric)) +
+    geom_ribbon(aes(ymin = `Quantile.0.025(R)`, ymax = `Quantile.0.975(R)`, fill = metric), alpha=0.1) +
+    geom_hline(aes(yintercept = 1), colour="red") +
+    expand_limits(y=0) +
+    labs(
+      x = "Time (day)",
+      y = "Estimated R"
+    )
+  
+}
+```
+
+## Cases per Day
+
+```{r}
+df.rivm %>%
+  f_plot_increase()
+```
+
+```{r}
+df.rivm %>%
+  f_plot_cumulative()
+```
+
+## Death Rate
+
+```{r}
+f_plot_death_rate <- function( .d ) {
+  
+  .d %>%
+    mutate(
+      cum_cases = cumsum(new_cases),
+      cum_deaths = cumsum(new_deaths),
+      death_rate = cum_deaths / cum_cases
+    ) %>%
+    filter(cum_cases > 0, cum_deaths > 0) %>%
+    ggplot(aes(x=date_reported, y=death_rate)) +
+    geom_line() +
+    geom_point() +
+    scale_y_continuous(labels = scales::percent) +
+    labs(
+      x = "Date",
+      y = "Death Rate"
+    )
+  
+}
+```
+
+### Dutch Situation
+
+```{r}
+df.rivm %>%
+  f_plot_death_rate()
+```
+
+```{r}
+df.r <- df.rivm %>%
+  pivot_longer(
+    cols = starts_with("new_"),
+    names_to = "metric",
+    names_prefix = "new_",
+    values_to = "value"
+  ) %>%
+  group_by(geo_id, metric) %>%
+  nest() %>%
+  mutate(
+    model = map(data, f_estimate_r, "value"),
+    r_estimate = map(model, f_extract_r)
+  ) %>%
+  unnest(r_estimate)
+```
+
+```{r}
+df.r %>%
+  f_plot_r_estimate
+```
+
+```{r}
+df.r %>%
+  f_plot_r_estimate +
+  facet_wrap(~metric, ncol=1)
+```
+
+Last 14 days:
+
+```{r}
+df.r %>%
+  filter(max(t_end) - t_end <= 14) %>%
+  f_plot_r_estimate
+```
