@@ -265,6 +265,7 @@ f_plot_death_rate <- function( .d ) {
     geom_line() +
     geom_point() +
     scale_y_continuous(labels = scales::percent) +
+    expand_limits(y=0) +
     labs(
       x = "Date",
       y = "Death Rate"
