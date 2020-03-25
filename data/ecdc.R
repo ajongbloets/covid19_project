@@ -41,7 +41,7 @@ load_ecdc_file <- function( path, pattern) {
   
   read_excel(path) %>%
     select(
-      date_reported = 1, new_cases = 5, new_deaths = 6, country = 7, geo_id = 8
+      date_reported = 1, new_cases = 5, new_deaths = 6, country = 7, geo_id = 8, pop_size = 9
     ) %>%
     mutate(
       dataset = lubridate::ymd(dataset)

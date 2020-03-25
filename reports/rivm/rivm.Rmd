@@ -1,5 +1,5 @@
 ---
-title: "ECDC COVID-19 Data"
+title: "RIVM COVID-19 Data"
 author: "Joeri Jongbloets"
 date: "`r strftime(Sys.Date(), '%B %d %Y')`"
 output: html_document
