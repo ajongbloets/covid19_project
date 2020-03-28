@@ -13,55 +13,52 @@ collect_rivm_files <- function(path = NULL, pattern = NULL) {
     pattern <- rivm.file.pattern
   }
   
-  list.files(
-    path, pattern, full.names = TRUE
-  )
-  
-}
-
-load_rivm_file <- function( path, pattern) {
-  
-  dataset <- sub(pattern, "\\1", path)
-  
-  read_excel(path) %>%
+  results <- tibble(
+    path = list.files(
+      path, pattern, full.names = TRUE
+    ),
+    pattern = pattern
+  ) %>%
     mutate(
-      dataset = lubridate::ymd(dataset)
+      dataset = lubridate::ymd(sub(pattern, "\\1", path))
     )
   
+  return(results)
 }
 
-load_rivm <- function( data.files = NULL, path = NULL, pattern = NULL, .most.recent = TRUE) {
+load_rivm_file <- function(path, pattern=NULL) {
+  
+  read_excel(path)
+  
+}
+
+load_rivm <- function( df.files = NULL, path = NULL, pattern = NULL, .most.recent = TRUE) {
   
   if (is.null(pattern)) {
     pattern <- rivm.file.pattern
   }
   
-  if (is.null(data.files)) { 
-    data.files <- collect_rivm_files(path = path, pattern = pattern)  
+  if (is.null(df.files)) { 
+    df.files <- collect_rivm_files(path = path, pattern = pattern)  
   }
-  
-  results <- map_dfr(
-    data.files, load_rivm_file, pattern=pattern
-  )
   
   if (.most.recent) {
-    
-    results %>%
+    df.files <- df.files %>%
       filter(dataset == max(dataset))
-    
   }
+  
+  results <- df.files %>%
+    mutate(
+      data = map2(path, pattern, load_rivm_file)
+    ) %>%
+    unnest(data) %>%
+    select(-c(path, pattern, dataset))
   
   return(results)
   
 }
 
-summarise_rivm <- function( df.data = NULL ) {
-  
-  if (is.null(df.data)) {
-    
-    df.data <- load_rivm()
-    
-  }
+summarise_rivm <- function( df.data ) {
   
   df.data %>%
     group_by(date_reported, add = T) %>%

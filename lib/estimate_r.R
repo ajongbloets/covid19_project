@@ -1,10 +1,12 @@
 
+require("EpiEstim")
+
 f_estimate_r <- function( df.data, variable, si_mean = 5, si_sd = 3.4  ) {
   variable <- enquo(variable)
   
   cases <- df.data %>%
     arrange(date_reported) %>%
-    filter(!!variable > 0) %>%
+    trim.df( variable = !!variable, value = 0, side = "both") %>%
     pull(!!variable)
   
   result <- NA

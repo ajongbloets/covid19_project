@@ -20,6 +20,7 @@ library("tidyverse")
 source(here::here("settings.R"))
 
 # load helper functions
+source(file.path(lib.dir, "trim.R"))
 source(file.path(lib.dir, "estimate_r.R"))
 
 # load data

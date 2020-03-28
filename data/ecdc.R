@@ -13,10 +13,17 @@ collect_ecdc_files <- function(path = NULL, pattern = NULL) {
     pattern <- ecdc.file.pattern
   }
   
-  list.files(
-    path, pattern, full.names = TRUE
-  )
+  results <- tibble(
+    path = list.files(
+      path, pattern, full.names = TRUE
+    ),
+    pattern = pattern
+  ) %>%
+    mutate(
+      dataset = lubridate::ymd(sub(pattern, "\\1", path))
+    )
   
+  return(results)
 }
 
 download_ecdc_file <- function( .date = NULL ) {
@@ -35,16 +42,14 @@ download_ecdc_file <- function( .date = NULL ) {
   try( httr::GET(url, authenticate(":", ":", type="ntlm"), write_disk(tmp)) )
 }
 
-load_ecdc_file <- function( path, pattern) {
-  
-  dataset <- sub(pattern, "\\1", path)
+load_ecdc_file <- function( path, pattern=NULL) {
   
   read_excel(path) %>%
     select(
       date_reported = 1, new_cases = 5, new_deaths = 6, country = 7, geo_id = 8, pop_size = 9
     ) %>%
     mutate(
-      dataset = lubridate::ymd(dataset)
+      date_reported = lubridate::dmy(date_reported)
     ) %>%
     filter(
       new_cases >= 0, new_deaths >= 0
@@ -52,26 +57,27 @@ load_ecdc_file <- function( path, pattern) {
   
 }
 
-load_ecdc <- function( data.files = NULL, path = NULL, pattern = NULL, .most.recent = TRUE) {
+load_ecdc <- function( df.files = NULL, path = NULL, pattern = NULL, .most.recent = TRUE) {
   
   if (is.null(pattern)) {
     pattern <- ecdc.file.pattern
   }
   
-  if (is.null(data.files)) { 
-    data.files <- collect_ecdc_files(path = path, pattern = pattern)  
+  if (is.null(df.files)) { 
+    df.files <- collect_ecdc_files(path = path, pattern = pattern)  
   }
-  
-  results <- map_dfr(
-    data.files, load_ecdc_file, pattern=pattern
-  )
   
   if (.most.recent) {
-    
-    results %>%
+    df.files <- df.files %>%
       filter(dataset == max(dataset))
-    
   }
+  
+  results <- df.files %>%
+    mutate(
+      data = map(path, load_ecdc_file, pattern=pattern)
+    ) %>%
+    unnest(data) %>%
+    select(-c(path, pattern, dataset))
   
   return(results)
   
