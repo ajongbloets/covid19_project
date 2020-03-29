@@ -1,8 +1,8 @@
 
 
-trim.df <- function( df.data, variable, value, side = "left", .index_name = "i" ) {
+trim.df <- function( df.data, values_from, value, side = "left", .index_name = "i" ) {
   
-  variable <- enquo(variable)
+  values_from <- enquo(values_from)
 
   stopifnot(side %in% c("left", "right", "both"))
   
@@ -11,18 +11,18 @@ trim.df <- function( df.data, variable, value, side = "left", .index_name = "i" 
     
     return(
       df.data %>%
-        trim.df( !! variable, value, side = "left", .index_name = .index_name) %>%
-        trim.df( !! variable, value, side = "right", .index_name = .index_name)
+        trim.df( !!values_from, value, side = "left", .index_name = .index_name) %>%
+        trim.df( !!values_from, value, side = "right", .index_name = .index_name)
     )
     
   }
   
   indexes <- df.data %>%
     mutate(
-      !! .index_name := row_number()
+      !!.index_name := row_number()
     ) %>%
     filter(
-      (!! variable) != !!value
+      (!!values_from) != !!value
     ) %>%
     pull(!!.index_name)
   

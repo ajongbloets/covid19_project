@@ -38,16 +38,10 @@ si_sd <- 3.4
 ```{r}
 f_plot_increase <- function(d) {
   d %>%
-    pivot_longer(
-      cols = starts_with("new_"),
-      names_to = "variable",
-      names_prefix = "new_",
-      values_to = "value"
-    ) %>%
     filter( value > 0 ) %>%
-    ggplot(aes(x = date_reported, y= value, colour= variable )) +
-    facet_wrap(~variable, scales="free_y") +
-    geom_smooth(se=F) +
+    ggplot(aes(x = date_reported, y= value, colour= metric )) +
+    facet_wrap(~metric, scales="free_y") +
+    geom_smooth(se=F, method = "loess", formula = y ~ x) +
     geom_point() +
     scale_y_log10() +
     labs(
@@ -57,21 +51,15 @@ f_plot_increase <- function(d) {
 
 f_plot_cumulative <- function(d) {
   d %>%
-    pivot_longer(
-      cols = starts_with("new_"),
-      names_to = "variable",
-      names_prefix = "new_",
-      values_to = "value"
-    ) %>%
-    group_by(variable) %>%
+    group_by(metric) %>%
     arrange(date_reported) %>%
     mutate(
       cum_value = cumsum(value)
     ) %>%
     filter( cum_value > 0 ) %>%
-    ggplot(aes(x = date_reported, y= cum_value, colour= variable )) +
-    facet_wrap(~variable, scales="free_y") +
-    geom_smooth(se=F) +
+    ggplot(aes(x = date_reported, y= cum_value, colour= metric )) +
+    facet_wrap(~metric, scales="free_y") +
+    geom_smooth(se=F, method = "loess", formula = y ~ x) +
     geom_point() +
     scale_y_log10() +
     labs(
@@ -79,33 +67,56 @@ f_plot_cumulative <- function(d) {
     )
 }
 
-f_plot_r_estimate <- function( d ) {
+f_plot_r_over_time <- function( d ) {
   
   d %>%
-    ggplot(aes(x=t_day, y=`Mean(R)` )) +
+    ggplot(aes(x=date_reported, y=r_mean )) +
     geom_point(aes(colour = metric)) +
     geom_line(aes(colour = metric)) +
-    geom_ribbon(aes(ymin = `Quantile.0.025(R)`, ymax = `Quantile.0.975(R)`, fill = metric), alpha=0.1) +
+    geom_ribbon(aes(ymin = r_ci_lower, ymax = r_ci_upper, fill = metric), alpha=0.1) +
     geom_hline(aes(yintercept = 1), colour="red") +
     expand_limits(y=0) +
     labs(
-      x = "Days before today",
+      x = "Date",
       y = "Estimated R"
     )
   
 }
+
+f_plot_r_over_incidence <- function( d ) {
+  
+  d %>%
+    group_by(metric) %>%
+    arrange(date_reported) %>%
+    mutate(
+      cum_value = cumsum(value)
+    ) %>%
+    filter( cum_value > 0 ) %>%
+    ggplot(aes(x=cum_value, y=r_mean, colour=metric )) +
+    facet_wrap(~metric, scales="free_x") +
+    geom_point() +
+    geom_line() +
+    expand_limits(y=0) +
+    labs(
+      x = "# cases",
+      y = "Estimated R"
+    )
+}
+
 ```
 
 ## Cases per Day
 
 ```{r}
 df.rivm %>%
-  f_plot_increase()
+  f_plot_increase() +
+  theme(legend.position = "bottom")
 ```
 
 ```{r}
 df.rivm %>%
-  f_plot_cumulative()
+  f_plot_cumulative() +
+  theme(legend.position = "bottom")
 ```
 
 ## Death Rate
@@ -114,6 +125,12 @@ df.rivm %>%
 f_plot_death_rate <- function( .d ) {
   
   .d %>%
+    pivot_wider(
+      names_from = metric,
+      names_prefix = "new_",
+      values_from = value
+    ) %>%
+    arrange(date_reported) %>%
     mutate(
       cum_cases = cumsum(new_cases),
       cum_deaths = cumsum(new_deaths),
@@ -143,23 +160,22 @@ df.rivm %>%
 
 ```{r}
 df.r <- df.rivm %>%
-  pivot_longer(
-    cols = starts_with("new_"),
-    names_to = "metric",
-    names_prefix = "new_",
-    values_to = "value"
-  ) %>%
   group_by(geo_id, metric) %>%
   nest() %>%
   group_by(geo_id, metric) %>%
   mutate(
-    model = map(data, f_estimate_r, variable = value, si_mean = si_mean, si_sd = si_sd),
-    r_estimate = map(model, f_extract_r)
+    model = map(data, f_estimate_r, cases_from = value, si_mean = si_mean, si_sd = si_sd),
+    r_estimate = map2(data, model, f_extract_r, time_from = date_reported)
   ) %>%
   unnest(r_estimate)
 ```
 
 ```{r}
 df.r %>%
-  f_plot_r_estimate
+  f_plot_r_over_time
+```
+
+```{r}
+df.r %>%
+  f_plot_r_over_incidence
 ```

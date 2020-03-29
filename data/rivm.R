@@ -52,7 +52,13 @@ load_rivm <- function( df.files = NULL, path = NULL, pattern = NULL, .most.recen
       data = map2(path, pattern, load_rivm_file)
     ) %>%
     unnest(data) %>%
-    select(-c(path, pattern, dataset))
+    select(-c(path, pattern, dataset)) %>%
+    pivot_longer(
+      cols = starts_with("new_"),
+      names_to = "metric",
+      names_prefix = "new_",
+      values_to = "value"
+    )
   
   return(results)
   

@@ -77,7 +77,13 @@ load_ecdc <- function( df.files = NULL, path = NULL, pattern = NULL, .most.recen
       data = map(path, load_ecdc_file, pattern=pattern)
     ) %>%
     unnest(data) %>%
-    select(-c(path, pattern, dataset))
+    select(-c(path, pattern, dataset)) %>%
+    pivot_longer(
+      cols = c(new_cases, new_deaths),
+      names_to = "metric",
+      names_prefix = "new_",
+      values_to = "value"
+    )
   
   return(results)
   
@@ -92,10 +98,9 @@ summarise_ecdc <- function( df.data = NULL ) {
   }
   
   df.data %>%
-    group_by(date_reported, add = T) %>%
+    group_by(metric, date_reported, add = T) %>%
     summarise(
-      new_cases = sum(new_cases),
-      new_deaths = sum(new_deaths)
+      value = sum(value)
     )
   
 }

@@ -12,6 +12,7 @@ knitr::opts_chunk$set(
 )
 
 library("EpiEstim")
+library("patchwork")
 library("tidyverse")
 ```
 
@@ -39,16 +40,10 @@ si_sd <- 3.4
 ```{r}
 f_plot_increase <- function(d) {
   d %>%
-    pivot_longer(
-      cols = c(new_cases, new_deaths),
-      names_to = "variable",
-      names_prefix = "new_",
-      values_to = "value"
-    ) %>%
     filter( value > 0 ) %>%
-    ggplot(aes(x = date_reported, y= value, colour= variable )) +
-    facet_wrap(~variable, scales="free_y") +
-    geom_smooth(se=F) +
+    ggplot(aes(x = date_reported, y= value, colour=metric )) +
+    facet_wrap(~metric, scales="free_y") +
+    geom_smooth(se=F, method = "loess", formula = y ~ x) +
     geom_point() +
     scale_y_log10() +
     labs(
@@ -58,20 +53,15 @@ f_plot_increase <- function(d) {
 
 f_plot_cumulative <- function(d) {
   d %>%
-    pivot_longer(
-      cols = c(new_cases, new_deaths),
-      names_to = "variable",
-      names_prefix = "new_",
-      values_to = "value"
-    ) %>%
-    group_by(variable) %>%
+    group_by(metric) %>%
+    arrange(date_reported) %>%
     mutate(
       cum_value = cumsum(value)
     ) %>%
     filter( cum_value > 0 ) %>%
-    ggplot(aes(x = date_reported, y= cum_value, colour= variable )) +
-    facet_wrap(~variable, scales="free_y") +
-    geom_smooth(se=F) +
+    ggplot(aes(x = date_reported, y= cum_value, colour= metric )) +
+    facet_wrap(~metric, scales="free_y") +
+    geom_smooth(se=F, method = "loess", formula = y ~ x) +
     geom_point() +
     scale_y_log10() +
     labs(
@@ -79,21 +69,44 @@ f_plot_cumulative <- function(d) {
     )
 }
 
-f_plot_r_estimate <- function( d ) {
+f_plot_r_over_time <- function( d ) {
   
   d %>%
-    ggplot(aes(x=t_day, y=`Mean(R)` )) +
+    ggplot(aes(x=date_reported, y=r_mean)) +
+    facet_wrap(~metric) +
     geom_point(aes(colour = geo_id)) +
     geom_line(aes(colour = geo_id)) +
-    geom_ribbon(aes(ymin = `Quantile.0.025(R)`, ymax = `Quantile.0.975(R)`, fill = geo_id), alpha=0.1) +
+    geom_ribbon(aes(ymin = r_ci_lower, ymax = r_ci_upper, fill = geo_id), alpha=0.1) +
     geom_hline(aes(yintercept = 1), colour="red") +
     expand_limits(y=0) +
     labs(
-      x = "Days before today",
+      x = "Date",
       y = "Estimated R"
     )
   
 }
+
+f_plot_r_over_incidence <- function( d ) {
+  
+  d %>%
+    group_by(metric) %>%
+    arrange(date_reported) %>%
+    mutate(
+      cum_value = cumsum(value)
+    ) %>%
+    filter( cum_value > 0 ) %>%
+    ggplot(aes(x=(cum_value / pop_size) * 1000, y=r_mean, colour=geo_id)) +
+    facet_wrap(~metric, scales="free_x") +
+    geom_point() +
+    geom_line() +
+    # scale_x_log10() +
+    expand_limits(y=0) +
+    labs(
+      x = "# cases per 1000",
+      y = "Estimated R"
+    )
+}
+
 ```
 
 ```{r}
@@ -145,19 +158,53 @@ df.ecdc %>%
   f_plot_cumulative()
 ```
 
+```{r}
+df.ecdc.europe <- df.ecdc %>%
+  filter(geo_id %in% european) %>%
+  group_by(metric, geo_id) %>%
+  summarise(
+    value = sum(value)
+  ) %>%
+  group_by(metric) %>%
+  mutate(
+    perc_value = value / sum(value),
+  )
+
+p1 <- df.ecdc.europe %>%
+  filter(metric == "cases") %>%
+  ggplot(aes(x=fct_reorder(geo_id, perc_value), y=perc_value, fill = geo_id)) +
+  geom_col() +
+  coord_flip() +
+  labs(
+    x = "Country",
+    y = "% of total"
+  )
+
+p2 <- df.ecdc.europe %>%
+  filter(metric == "deaths") %>%
+  ggplot(aes(x=fct_reorder(geo_id, perc_value), y=perc_value, fill = geo_id)) +
+  geom_col() +
+  coord_flip() +
+  labs(
+    x = "Country",
+    y = "% of total"
+  )
+
+
+p1 + p2 + plot_layout(guides = 'collect') & theme(legend.position = 'none')
+```
+
 ### Italian Situation
 
 ```{r}
 df.ecdc %>%
   filter(geo_id == "IT") %>%
-  summarise_ecdc %>%
   f_plot_increase()
 ```
 
 ```{r}
 df.ecdc %>%
   filter(geo_id == "IT") %>%
-  summarise_ecdc %>%
   f_plot_cumulative()
 ```
 
@@ -166,14 +213,12 @@ df.ecdc %>%
 ```{r}
 df.ecdc %>%
   filter(geo_id == "NL") %>%
-  summarise_ecdc %>%
   f_plot_increase()
 ```
 
 ```{r}
 df.ecdc %>%
   filter(geo_id == "NL") %>%
-  summarise_ecdc %>%
   f_plot_cumulative()
 ```
 
@@ -193,12 +238,6 @@ df.params <- data.frame(
 ```{r}
 df.ecdc %>%
   filter(geo_id %in% c("NL", "IT")) %>%
-  pivot_longer(
-      cols = c(new_cases, new_deaths),
-      names_to = "variable",
-      names_prefix = "new_",
-      values_to = "value"
-    ) %>%
   left_join(
     df.params, by = c("geo_id")
   ) %>%
@@ -208,7 +247,7 @@ df.ecdc %>%
   ) %>%
   filter( t_day > 0 ) %>%
   ggplot(aes(x = t_day, y= value_norm, colour= geo_id )) +
-  facet_wrap(~variable, scales="free_y") +
+  facet_wrap(~metric, scales="free_y") +
   geom_smooth(se=F) +
   geom_point() +
   scale_y_log10() +
@@ -220,17 +259,11 @@ df.ecdc %>%
 ```{r}
 df.ecdc %>%
   filter(geo_id %in% c("NL", "IT")) %>%
-  pivot_longer(
-      cols = c(new_cases, new_deaths),
-      names_to = "variable",
-      names_prefix = "new_",
-      values_to = "value"
-    ) %>%
   left_join(
     df.params, by = c("geo_id")
   ) %>%
+  group_by(geo_id, metric) %>%
   arrange(date_reported) %>%
-  group_by(geo_id, variable) %>%
   mutate(
     cum_value = cumsum(value)
   ) %>%
@@ -241,7 +274,7 @@ df.ecdc %>%
   ) %>%
   filter( t_day > 0 ) %>%
   ggplot(aes(x = t_day, y= cum_value_norm, colour= geo_id )) +
-  facet_wrap(~variable, scales="free_y") +
+  facet_wrap(~metric, scales="free_y") +
   geom_smooth(se=F) +
   geom_point() +
   scale_y_log10() +
@@ -256,6 +289,12 @@ df.ecdc %>%
 f_plot_death_rate <- function( .d ) {
   
   .d %>%
+    pivot_wider(
+      names_from = metric,
+      names_prefix = "new_",
+      values_from = value
+    ) %>%
+    arrange(date_reported) %>%
     mutate(
       cum_cases = cumsum(new_cases),
       cum_deaths = cumsum(new_deaths),
@@ -297,7 +336,6 @@ df.ecdc %>%
 ```{r}
 df.ecdc %>%
   filter(geo_id == "IT" ) %>%
-  summarise_ecdc %>%
   f_plot_death_rate()
 ```
 
@@ -306,7 +344,6 @@ df.ecdc %>%
 ```{r}
 df.ecdc %>%
   filter(geo_id == "NL") %>%
-  summarise_ecdc %>%
   f_plot_death_rate()
 ```
 
@@ -314,40 +351,47 @@ df.ecdc %>%
 
 ```{r}
 df.r <- df.ecdc %>%
-  group_by(country, geo_id) %>%
+  group_by(geo_id, metric) %>%
   nest() %>%
-  mutate(
-    model = map(data, f_estimate_r, variable = new_cases, si_mean = si_mean, si_sd = si_sd),
-    r_estimate = map(model, f_extract_r)
+  bind_rows(
+    df.ecdc %>%
+      group_by(metric) %>%
+      summarise_ecdc %>%
+      mutate(geo_id = "Global") %>%
+      group_by(metric, geo_id) %>%
+      nest(),
+    df.ecdc %>%
+      filter(geo_id %in% european) %>%
+      group_by(metric) %>%
+      summarise_ecdc %>%
+      mutate(geo_id = "EU") %>%
+      group_by(metric, geo_id) %>%
+      nest()
   ) %>%
-  unnest(r_estimate)
+  group_by(geo_id, metric) %>%
+  mutate(
+    model = map(data, f_estimate_r, cases_from = value, si_mean = si_mean, si_sd = si_sd),
+    r_estimate = map2(data, model, f_extract_r, time_from = date_reported)
+  ) %>%
+  filter(!is.na(r_estimate))
 ```
 
 ### Global Situation
 
 ```{r}
-df.ecdc %>%
-  summarise_ecdc %>%
-  f_estimate_r(variable = new_cases, si_mean = si_mean, si_sd = si_sd) %>%
-  f_extract_r %>%
-  mutate(
-    geo_id = "Global"
-  ) %>%
-  f_plot_r_estimate
+df.r %>%
+  filter(geo_id == "Global") %>%
+  unnest(r_estimate) %>%
+  f_plot_r_over_time()
 ```
 
 ### European Situation
 
 ```{r}
-df.ecdc %>%
-  filter(geo_id %in% european) %>%
-  summarise_ecdc %>%
-  f_estimate_r(variable = new_cases, si_mean = si_mean, si_sd = si_sd) %>%
-  f_extract_r %>%
-  mutate(
-    geo_id = "EU"
-  ) %>%
-  f_plot_r_estimate
+df.r %>%
+  filter(geo_id == "EU") %>%
+  unnest(r_estimate) %>%
+  f_plot_r_over_time()
 ```
 
 ### Italian Situation
@@ -355,7 +399,8 @@ df.ecdc %>%
 ```{r}
 df.r %>%
   filter(geo_id == "IT") %>% 
-  f_plot_r_estimate
+  unnest(r_estimate) %>%
+  f_plot_r_over_time
 ```
 
 ### Dutch Situation
@@ -363,7 +408,8 @@ df.r %>%
 ```{r}
 df.r %>%
   filter(geo_id == "NL") %>% 
-  f_plot_r_estimate
+  unnest(r_estimate) %>%
+  f_plot_r_over_time
 ```
 
 ### Overlap
@@ -372,6 +418,19 @@ df.r %>%
 df.r %>%
   group_by(geo_id) %>%
   filter(geo_id %in% c("IT" , "NL", "DE")) %>% 
-  filter(max(t_end) - t_end <= 21) %>%
-  f_plot_r_estimate
+  unnest(r_estimate) %>%
+  filter(t_day > -21) %>%
+  f_plot_r_over_time
+```
+
+### R vs Incidence
+
+```{r}
+df.r %>%
+  group_by(geo_id, metric) %>%
+  filter(geo_id %in% c("IT" , "NL", "DE")) %>% 
+  unnest(r_estimate) %>%
+  filter(value > 0) %>% 
+  f_plot_r_over_incidence() +
+  coord_cartesian(ylim = c(0, 10))
 ```
