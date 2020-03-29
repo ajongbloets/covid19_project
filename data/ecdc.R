@@ -48,9 +48,9 @@ load_ecdc_file <- function( path, pattern=NULL) {
     select(
       date_reported = 1, new_cases = 5, new_deaths = 6, country = 7, geo_id = 8, pop_size = 9
     ) %>%
-    mutate(
-      date_reported = lubridate::dmy(date_reported)
-    ) %>%
+    # mutate(
+    #   date_reported = lubridate::dmy(date_reported)
+    # ) %>%
     filter(
       new_cases >= 0, new_deaths >= 0
     )

@@ -158,6 +158,10 @@ df.ecdc %>%
   f_plot_cumulative()
 ```
 
+#### Distribution of cases over Europe
+
+Percentage of cases = cumulative cases of country divided by total cases in europe.
+
 ```{r}
 df.ecdc.europe <- df.ecdc %>%
   filter(geo_id %in% european) %>%
@@ -177,7 +181,8 @@ p1 <- df.ecdc.europe %>%
   coord_flip() +
   labs(
     x = "Country",
-    y = "% of total"
+    y = "% of total",
+    title = "Confirmed Cases"
   )
 
 p2 <- df.ecdc.europe %>%
@@ -187,7 +192,48 @@ p2 <- df.ecdc.europe %>%
   coord_flip() +
   labs(
     x = "Country",
-    y = "% of total"
+    y = "% of total",
+    title = "Confirmed Deaths"
+  )
+
+
+p1 + p2 + plot_layout(guides = 'collect') & theme(legend.position = 'none')
+```
+
+Percentage of cases = cumulative cases **per 1000** of country divided by total cases in europe.
+
+```{r}
+df.ecdc.europe <- df.ecdc %>%
+  filter(geo_id %in% european) %>%
+  group_by(metric, geo_id) %>%
+  summarise(
+    value = sum(value) / mean(pop_size)
+  ) %>%
+  group_by(metric) %>%
+  mutate(
+    perc_value = value / sum(value),
+  )
+
+p1 <- df.ecdc.europe %>%
+  filter(metric == "cases") %>%
+  ggplot(aes(x=fct_reorder(geo_id, perc_value), y=perc_value, fill = geo_id)) +
+  geom_col() +
+  coord_flip() +
+  labs(
+    x = "Country",
+    y = "% of total per 1000",
+    title = "Confirmed Cases"
+  )
+
+p2 <- df.ecdc.europe %>%
+  filter(metric == "deaths") %>%
+  ggplot(aes(x=fct_reorder(geo_id, perc_value), y=perc_value, fill = geo_id)) +
+  geom_col() +
+  coord_flip() +
+  labs(
+    x = "Country",
+    y = "% of total per 1000",
+    title = "Confirmed Deaths"
   )
 
 
