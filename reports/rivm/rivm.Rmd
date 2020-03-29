@@ -49,8 +49,8 @@ f_plot_increase <- function(d) {
     )
 }
 
-f_plot_cumulative <- function(d) {
-  d %>%
+f_plot_cumulative <- function(d, show.log = TRUE) {
+  p <- d %>%
     group_by(metric) %>%
     arrange(date_reported) %>%
     mutate(
@@ -61,10 +61,15 @@ f_plot_cumulative <- function(d) {
     facet_wrap(~metric, scales="free_y") +
     geom_smooth(se=F, method = "loess", formula = y ~ x) +
     geom_point() +
-    scale_y_log10() +
     labs(
       x = "Date", y = "cumalative #"
     )
+  
+  if (show.log) {
+    p <- p + scale_y_log10()
+  }
+  
+  p
 }
 
 f_plot_r_over_time <- function( d ) {
@@ -110,6 +115,12 @@ f_plot_r_over_incidence <- function( d ) {
 ```{r}
 df.rivm %>%
   f_plot_increase() +
+  theme(legend.position = "bottom")
+```
+
+```{r}
+df.rivm %>%
+  f_plot_cumulative(show.log = F) +
   theme(legend.position = "bottom")
 ```
 
