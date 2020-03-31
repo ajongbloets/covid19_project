@@ -47,25 +47,49 @@ f_plot_increase <- function(d) {
     geom_point() +
     scale_y_log10() +
     labs(
-      x = "Date", y = "new #"
+      x = "Date", y = "new # cases"
     )
 }
 
-f_plot_cumulative <- function(d) {
-  d %>%
+f_plot_cumulative <- function(d, show.log = TRUE, show.percent = FALSE) {
+  
+  d <- d %>%
     group_by(metric) %>%
     arrange(date_reported) %>%
     mutate(
       cum_value = cumsum(value)
-    ) %>%
+    )
+  
+  if (show.percent) {
+    d <- d %>%
+      mutate(
+        cum_value = cum_value / pop_size
+      )
+  }
+  
+  p <- d %>%
     filter( cum_value > 0 ) %>%
     ggplot(aes(x = date_reported, y= cum_value, colour= metric )) +
     facet_wrap(~metric, scales="free_y") +
     geom_smooth(se=F, method = "loess", formula = y ~ x) +
-    geom_point() +
-    scale_y_log10() +
+    geom_point()
+  
+  y_label <- "cumalative # cases"
+    
+  scale_trans = "identity"
+  if (show.log) {
+    scale_trans <- "log10"
+  }
+  
+  scale_labels = NULL
+  if (show.percent) {
+    scale_labels <- scales::percent
+    y_label <- "% cases"
+  }
+  
+  p + scale_y_continuous(trans = scale_trans, labels = scale_labels) +
     labs(
-      x = "Date", y = "cumalative #"
+      x = "Date", y = y_label
     )
 }
 
@@ -251,7 +275,19 @@ df.ecdc %>%
 ```{r}
 df.ecdc %>%
   filter(geo_id == "IT") %>%
+  f_plot_cumulative(show.log = F)
+```
+
+```{r}
+df.ecdc %>%
+  filter(geo_id == "IT") %>%
   f_plot_cumulative()
+```
+
+```{r}
+df.ecdc %>%
+  filter(geo_id == "IT") %>%
+  f_plot_cumulative(show.percent = T)
 ```
 
 ### Dutch Situation
@@ -260,6 +296,12 @@ df.ecdc %>%
 df.ecdc %>%
   filter(geo_id == "NL") %>%
   f_plot_increase()
+```
+
+```{r}
+df.ecdc %>%
+  filter(geo_id == "NL") %>%
+  f_plot_cumulative(show.log = F)
 ```
 
 ```{r}
