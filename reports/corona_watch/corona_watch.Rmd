@@ -27,12 +27,98 @@ source(file.path(lib.dir, "estimate_r.R"))
 source(file.path(data.dir, "cw.R"))
 
 df.cw <- load_cw()
+df.cw.latest <- df.cw %>%
+  filter(report_date == max(report_date))
 
-si_mean <- 5
-si_sd <- 3.4
+si_mean <- 3.96
+si_sd <- 4.75
 ```
 
-**Last timepoint: `r df.rivm %>% pull(date) %>% max()`**
+**Last timepoint: `r df.cw.latest %>% pull(date) %>% max()`**
+
+## Cases per Day
+
+```{r}
+df.cw.latest %>%
+  ggplot(aes(x = date, y=new_counts, colour= metric )) +
+  facet_wrap(~metric, scales="free_y") +
+  geom_smooth(se=F, method = "loess", formula = y ~ x) +
+  geom_point() +
+  scale_y_log10() +
+  labs(
+    x = "Date", y = "new #"
+  ) +
+  theme(legend.position = "bottom")
+```
+
+## Total Cases over Time
+
+```{r}
+df.cw.latest %>%
+  group_by(metric) %>%
+  arrange(date) %>%
+  mutate(
+    counts = cumsum(new_counts)
+  ) %>%
+  ggplot(aes(x = date, y=counts, colour= metric )) +
+  facet_wrap(~metric, scales="free_y") +
+  geom_smooth(se=F, method = "loess", formula = y ~ x) +
+  geom_point() +
+  scale_y_log10() +
+  labs(
+    x = "Date", y = "total #"
+  ) +
+  theme(legend.position = "bottom")
+```
+
+## Death Rate
+
+```{r}
+f_death_rate <- function(.d) {
+  .d %>%
+    group_by(metric) %>%
+    arrange(date) %>%
+    mutate(
+      counts = cumsum(new_counts)
+    ) %>%
+    select(-new_counts) %>%
+    pivot_wider(
+      names_from = metric,
+      names_prefix = "total_",
+      values_from = counts
+    ) %>%
+    mutate(
+      death_rate_cases = total_deaths / total_cases,
+      death_rate_hospital = total_deaths / total_hospital
+    )
+}
+```
+
+```{r}
+df.cw.latest %>%
+  f_death_rate() %>%
+  ggplot(aes(x=date, y=death_rate_cases)) +
+  geom_line() +
+  geom_point() +
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    x = "Date",
+    y = "Deaths per Case"
+  )
+```
+
+```{r}
+df.cw.latest %>%
+  f_death_rate() %>%
+  ggplot(aes(x=date, y=death_rate_hospital)) +
+  geom_line() +
+  geom_point() +
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    x = "Date",
+    y = "Deaths per Hospital Patient"
+  )
+```
 
 ## Estimating R
 
@@ -55,13 +141,17 @@ f_plot_r_over_time <- function( d ) {
 ```
 
 ```{r}
-df.r <- df.cw %>%
-  filter(report_date == max(report_date)) %>%
+df.r <- df.cw.latest %>%
   group_by(metric) %>%
   nest() %>%
   group_by(metric) %>%
   mutate(
-    model = map(data, f_estimate_r, cases_from = counts, time_from = date, si_mean = si_mean, si_sd = si_sd),
+    model = map(
+      data, f_estimate_r, 
+      method = "parametric_si",
+      cases_from = new_counts, time_from = date, 
+      mean_si = si_mean, std_si = si_sd
+    ),
     r_estimate = map2(data, model, f_extract_r, time_from = date)
   ) %>%
   unnest(r_estimate)
@@ -75,15 +165,54 @@ df.r %>%
 ## Count Update Probability
 
 ```{r}
-df.cw %>%
-  group_by(metric) %>%
-  filter(date == "2020-04-20") %>%
-  arrange(report_date) %>%
-  mutate(
-    new_counts = counts - lag(counts),
-    t = as.numeric(difftime(report_date, date, units = "days"))
-  ) %>%
-  ggplot(aes(x=t, y=new_counts)) + 
-  facet_wrap(~metric) +
-  geom_col()
+f_update_probability <- function( .d ) {
+  
+  t.first <- .d %>%
+    filter(report_date == min(report_date)) %>%
+    pull(report_date)
+  
+  final <- .d %>%
+    filter(report_date == max(report_date)) %>%
+    pull(new_counts)
+  
+  .d %>%
+    arrange(report_date) %>%
+    mutate(
+      t_since_first = as.numeric(difftime(report_date, t.first, units = "days")),
+      final_counts = final,
+      perc_of_last = new_counts / final_counts
+    )
+  
+}
 ```
+
+```{r}
+df.cw.updates <- df.cw %>%
+  group_by(metric, date) %>%
+  nest() %>%
+  mutate(
+    new_data = map(data, f_update_probability),
+  ) %>%
+  select(-data) %>%
+  unnest(new_data) %>%
+  group_by(metric) %>%
+  mutate(
+    is_new = as.numeric(difftime(max(report_date), date, units = "days")) < 7
+  )
+```
+
+```{r}
+df.cw.updates %>%
+  ggplot(aes(x=t_since_first, y=perc_of_last, colour=is_new)) + 
+  facet_wrap(~metric) +
+  geom_point()
+```
+
+```{r}
+df.cw.updates %>%
+  filter(t_since_first < 12) %>%
+  ggplot(aes(x = metric, y = perc_of_last, fill=metric)) + 
+  facet_wrap(~t_since_first, ncol=4) +
+  geom_violin()
+```
+

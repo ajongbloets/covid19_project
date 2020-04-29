@@ -1,11 +1,19 @@
 
 require("EpiEstim")
 
-f_estimate_r <- function( df.data, cases_from, si_mean = 5, si_sd = 3.4  ) {
+f_estimate_r <- function( 
+  df.data, cases_from, time_from, method="parametric_si", config = NULL, ...
+) {
+  
   cases_from <- enquo(cases_from)
+  time_from <- enquo(time_from)
+  
+  if ( is.null(config)) {
+    config <- make_config(...)
+  }
   
   cases <- df.data %>%
-    arrange(date_reported) %>%
+    arrange(!!time_from) %>%
     trim.df( values_from = !!cases_from, value = 0, side = "both") %>%
     pull(!!cases_from)
   
@@ -14,7 +22,7 @@ f_estimate_r <- function( df.data, cases_from, si_mean = 5, si_sd = 3.4  ) {
     
     result <- suppressMessages(
       estimate_R(
-        cases, method = "parametric_si", config = make_config(list(mean_si = si_mean, std_si = si_sd))
+        cases, method = method, config = config
       )
     )
     

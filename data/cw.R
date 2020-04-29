@@ -27,7 +27,7 @@ read_cw_file <- function( path, pattern=NULL) {
   
   read_csv(path) %>%
     rename(
-      date = Datum, metric = Type, counts = Aantal
+      date = Datum, metric = Type, new_counts = Aantal
     ) %>%
     mutate(
       metric = ifelse( metric == "Totaal", "cases", metric),
@@ -35,9 +35,7 @@ read_cw_file <- function( path, pattern=NULL) {
       metric = ifelse( metric == "Overleden", "deaths", metric)
     ) %>%
     group_by(metric) %>%
-    arrange(date) %>%
     mutate(
-      new_counts = counts - lag(counts, default=0),
       report_date = report_date
     )
   
@@ -58,7 +56,8 @@ load_cw <- function( df.files = NULL, path = NULL, pattern = NULL) {
       data = map(path, read_cw_file, pattern=pattern)
     ) %>%
     unnest(data) %>%
-    select(-c(path, pattern))
+    select(-c(path, pattern)) %>%
+    arrange(report_date, date)
   
   return(results)
   
