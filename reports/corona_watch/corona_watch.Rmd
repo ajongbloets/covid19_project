@@ -1,0 +1,89 @@
+---
+title: "Scrape Corona Watch"
+author: "Joeri Jongbloets"
+date: "`r strftime(Sys.Date(), '%B %d %Y')`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE, warning=FALSE
+  
+)
+
+library("EpiEstim")
+library("tidyverse")
+```
+
+```{r load_data, include=FALSE}
+# Load project settings
+source(here::here("settings.R"))
+
+# load helper functions
+source(file.path(lib.dir, "trim.R"))
+source(file.path(lib.dir, "estimate_r.R"))
+
+# load corona watch data
+source(file.path(data.dir, "cw.R"))
+
+df.cw <- load_cw()
+
+si_mean <- 5
+si_sd <- 3.4
+```
+
+**Last timepoint: `r df.rivm %>% pull(date) %>% max()`**
+
+## Estimating R
+
+```{r}
+f_plot_r_over_time <- function( d ) {
+  
+  d %>%
+    ggplot(aes(x=date, y=r_mean )) +
+    geom_point(aes(colour = metric)) +
+    geom_line(aes(colour = metric)) +
+    geom_ribbon(aes(ymin = r_ci_lower, ymax = r_ci_upper, fill = metric), alpha=0.1) +
+    geom_hline(aes(yintercept = 1), colour="red") +
+    expand_limits(y=0) +
+    labs(
+      x = "Date",
+      y = "Estimated R"
+    )
+  
+}
+```
+
+```{r}
+df.r <- df.cw %>%
+  filter(report_date == max(report_date)) %>%
+  group_by(metric) %>%
+  nest() %>%
+  group_by(metric) %>%
+  mutate(
+    model = map(data, f_estimate_r, cases_from = counts, time_from = date, si_mean = si_mean, si_sd = si_sd),
+    r_estimate = map2(data, model, f_extract_r, time_from = date)
+  ) %>%
+  unnest(r_estimate)
+```
+
+```{r}
+df.r %>%
+  f_plot_r_over_time
+```
+
+## Count Update Probability
+
+```{r}
+df.cw %>%
+  group_by(metric) %>%
+  filter(date == "2020-04-20") %>%
+  arrange(report_date) %>%
+  mutate(
+    new_counts = counts - lag(counts),
+    t = as.numeric(difftime(report_date, date, units = "days"))
+  ) %>%
+  ggplot(aes(x=t, y=new_counts)) + 
+  facet_wrap(~metric) +
+  geom_col()
+```
