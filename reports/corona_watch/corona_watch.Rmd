@@ -1,5 +1,5 @@
 ---
-title: "Scrape Corona Watch"
+title: "Corona Watch RIVM Data"
 author: "Joeri Jongbloets"
 date: "`r strftime(Sys.Date(), '%B %d %Y')`"
 output: html_document
@@ -36,42 +36,62 @@ si_sd <- 4.75
 
 **Last timepoint: `r df.cw.latest %>% pull(date) %>% max()`**
 
-## Cases per Day
+```{r}
+
+f_new_cases_day <- function(.d, counts_from = new_counts) {
+  counts_from <- enquo(counts_from)
+  
+  .d %>%
+    ggplot(aes(x = date, y=!!counts_from, colour= metric )) +
+    facet_wrap(~metric, scales="free_y") +
+    geom_smooth(se=F, method = "loess", formula = y ~ x) +
+    geom_point() +
+    scale_y_log10() +
+    labs(
+      x = "Date", y = "new #"
+    ) +
+    theme(legend.position = "bottom")
+}
+
+f_cases_day <- function(.d, counts_from = new_counts) {
+  counts_from <- enquo(counts_from)
+  
+  .d %>%
+    group_by(metric) %>%
+    arrange(date) %>%
+    mutate(
+      counts = cumsum(!!counts_from)
+    ) %>%
+    ggplot(aes(x = date, y=counts, colour= metric )) +
+    facet_wrap(~metric, scales="free_y") +
+    geom_smooth(se=F, method = "loess", formula = y ~ x) +
+    geom_point() +
+    scale_y_log10() +
+    labs(
+      x = "Date", y = "total #"
+    ) +
+    theme(legend.position = "bottom")
+}
+
+```
+
+## Raw Data
+
+### Cases per Day
 
 ```{r}
 df.cw.latest %>%
-  ggplot(aes(x = date, y=new_counts, colour= metric )) +
-  facet_wrap(~metric, scales="free_y") +
-  geom_smooth(se=F, method = "loess", formula = y ~ x) +
-  geom_point() +
-  scale_y_log10() +
-  labs(
-    x = "Date", y = "new #"
-  ) +
-  theme(legend.position = "bottom")
+  f_new_cases_day()
 ```
 
-## Total Cases over Time
+### Total Cases over Time
 
 ```{r}
 df.cw.latest %>%
-  group_by(metric) %>%
-  arrange(date) %>%
-  mutate(
-    counts = cumsum(new_counts)
-  ) %>%
-  ggplot(aes(x = date, y=counts, colour= metric )) +
-  facet_wrap(~metric, scales="free_y") +
-  geom_smooth(se=F, method = "loess", formula = y ~ x) +
-  geom_point() +
-  scale_y_log10() +
-  labs(
-    x = "Date", y = "total #"
-  ) +
-  theme(legend.position = "bottom")
+  f_cases_day()
 ```
 
-## Death Rate
+### Death Rate
 
 ```{r}
 f_death_rate <- function(.d) {
@@ -120,7 +140,7 @@ df.cw.latest %>%
   )
 ```
 
-## Estimating R
+### Effective R
 
 ```{r}
 f_plot_r_over_time <- function( d ) {
@@ -162,10 +182,15 @@ df.r %>%
   f_plot_r_over_time
 ```
 
-## Count Update Probability
+## Count Error
+
+We now that counts are updated retrospectively, due to delays in reporting. Based on previous data we can  estimate the % error given the "age" of the value.
+
+### Estimate Error
 
 ```{r}
 f_update_probability <- function( .d ) {
+  # .d = all counts for a given day
   
   t.first <- .d %>%
     filter(report_date == min(report_date)) %>%
@@ -178,16 +203,17 @@ f_update_probability <- function( .d ) {
   .d %>%
     arrange(report_date) %>%
     mutate(
-      t_since_first = as.numeric(difftime(report_date, t.first, units = "days")),
+      age = as.numeric(difftime(report_date, t.first, units = "days")),
       final_counts = final,
-      perc_of_last = new_counts / final_counts
+      perc_error = 1 - (new_counts / final_counts),
+      perc_error = ifelse(final_counts == 0, 0, perc_error)
     )
   
 }
 ```
 
 ```{r}
-df.cw.updates <- df.cw %>%
+df.cw.error <- df.cw %>%
   group_by(metric, date) %>%
   nest() %>%
   mutate(
@@ -195,24 +221,125 @@ df.cw.updates <- df.cw %>%
   ) %>%
   select(-data) %>%
   unnest(new_data) %>%
-  group_by(metric) %>%
+  group_by(metric)
+```
+
+```{r}
+df.cw.error %>%
+  group_by(metric, age) %>%
+  ggplot(aes(x=age, y =perc_error)) +
+  facet_wrap(~metric) +
+  geom_line(aes(colour=age, group=date), alpha=0.3) +
+  stat_summary(fun.data = "mean_cl_boot", geom = "ribbon", alpha=0.5) +
+  stat_summary(fun.y = "mean", geom = "line", colour="red") +
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    x = "Days since first report",
+    y = "% Error"
+  ) +
+  theme(legend.position = "none")
+```
+
+```{r}
+
+df.cw.error.model <- df.cw.error %>%
+  group_by(metric, age) %>%
+  summarise(
+    mean_error = mean(perc_error),
+    sd_error = sd(perc_error)
+  )
+
+f_apply <- function(new_counts, .age, .metric, df.model) {
+  
+  df.result <- df.model %>%
+    filter(metric == .metric, age == .age) 
+  
+  if (nrow(df.result) == 0) {
+    df.result <- df.model %>%
+      group_by(metric) %>%
+      filter(metric == .metric, age == max(age))
+  }
+  
+  df.result %>% ungroup() %>% select(-c(metric, age))
+}
+
+df.cw.latest.f <- df.cw.latest %>%
   mutate(
-    is_new = as.numeric(difftime(max(report_date), date, units = "days")) < 7
+    age = as.numeric(difftime(max(date), date, units="days")),
+    prediction = pmap(
+      list(new_counts=new_counts, .age=age, .metric=metric), 
+      f_apply,
+      df.model = df.cw.error.model
+    )
+  ) %>%
+  unnest(prediction) %>%
+  mutate(
+    # E = 1 - (new_counts / final_counts)
+    # final_counts = new_counts / (-E + 1)
+    update_new_counts = new_counts / (-mean_error + 1)
   )
 ```
 
+### Cases per Day
+
+How much did the data change?
+
 ```{r}
-df.cw.updates %>%
-  ggplot(aes(x=t_since_first, y=perc_of_last, colour=is_new)) + 
-  facet_wrap(~metric) +
-  geom_point()
+df.cw.latest.f %>%
+  pivot_longer(
+    cols = c(new_counts, update_new_counts),
+    names_to = "source",
+    values_to = "counts",
+  ) %>%
+  mutate(
+    source = ifelse(source == "new_counts", "original", "updated")
+  ) %>%
+  ggplot(aes(x = date, y=counts, shape=source, colour= metric )) +
+  facet_wrap(~metric, scales="free_y") +
+  # geom_smooth(se=F, method = "loess", formula = y ~ x) +
+  geom_point() +
+  geom_line(aes(group = date)) +
+  scale_y_log10() +
+  labs(
+    x = "Date", y = "new #"
+  ) +
+  theme(legend.position = "bottom")
+```
+
+Only new data
+
+```{r}
+df.cw.latest.f %>%
+ f_new_cases_day(counts_from = update_new_counts)
+```
+
+### Total Cases over time
+
+```{r}
+df.cw.latest.f %>%
+  f_cases_day(counts_from = update_new_counts)
+```
+
+### Effective R
+
+```{r}
+df.r.f <- df.cw.latest.f %>%
+  group_by(metric) %>%
+  nest() %>%
+  group_by(metric) %>%
+  mutate(
+    model = map(
+      data, f_estimate_r, 
+      method = "parametric_si",
+      cases_from = update_new_counts, time_from = date, 
+      mean_si = si_mean, std_si = si_sd
+    ),
+    r_estimate = map2(data, model, f_extract_r, time_from = date)
+  ) %>%
+  unnest(r_estimate)
 ```
 
 ```{r}
-df.cw.updates %>%
-  filter(t_since_first < 12) %>%
-  ggplot(aes(x = metric, y = perc_of_last, fill=metric)) + 
-  facet_wrap(~t_since_first, ncol=4) +
-  geom_violin()
+df.r.f %>%
+  f_plot_r_over_time
 ```
-
