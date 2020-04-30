@@ -189,7 +189,7 @@ We now that counts are updated retrospectively, due to delays in reporting. Base
 ### Estimate Error
 
 ```{r}
-f_update_probability <- function( .d ) {
+f_update_probability <- function( .t, .d ) {
   # .d = all counts for a given day
   
   t.first <- .d %>%
@@ -203,7 +203,8 @@ f_update_probability <- function( .d ) {
   .d %>%
     arrange(report_date) %>%
     mutate(
-      age = as.numeric(difftime(report_date, t.first, units = "days")),
+      # age = the number of days between day of report and the day that's being reported
+      age = as.numeric(difftime(report_date, .t, units = "days")),
       final_counts = final,
       perc_error = 1 - (new_counts / final_counts),
       perc_error = ifelse(final_counts == 0, 0, perc_error)
@@ -217,7 +218,7 @@ df.cw.error <- df.cw %>%
   group_by(metric, date) %>%
   nest() %>%
   mutate(
-    new_data = map(data, f_update_probability),
+    new_data = map2(date, data, f_update_probability),
   ) %>%
   select(-data) %>%
   unnest(new_data) %>%
@@ -231,7 +232,7 @@ df.cw.error %>%
   facet_wrap(~metric) +
   geom_line(aes(colour=age, group=date), alpha=0.3) +
   stat_summary(fun.data = "mean_cl_boot", geom = "ribbon", alpha=0.5) +
-  stat_summary(fun.y = "mean", geom = "line", colour="red") +
+  stat_summary(fun = "mean", geom = "line", colour="red") +
   scale_y_continuous(labels = scales::percent) +
   labs(
     x = "Days since first report",
@@ -265,6 +266,7 @@ f_apply <- function(new_counts, .age, .metric, df.model) {
 
 df.cw.latest.f <- df.cw.latest %>%
   mutate(
+    # calculate age as the number of days until today
     age = as.numeric(difftime(max(date), date, units="days")),
     prediction = pmap(
       list(new_counts=new_counts, .age=age, .metric=metric), 
@@ -276,7 +278,8 @@ df.cw.latest.f <- df.cw.latest %>%
   mutate(
     # E = 1 - (new_counts / final_counts)
     # final_counts = new_counts / (-E + 1)
-    update_new_counts = new_counts / (-mean_error + 1)
+    update_new_counts = new_counts / (-mean_error + 1),
+    update_new_counts_sd = new_counts / (-sd_error + 1)
   )
 ```
 
@@ -306,11 +309,11 @@ df.cw.latest.f %>%
   theme(legend.position = "bottom")
 ```
 
-Only new data
+Only updated data
 
 ```{r}
 df.cw.latest.f %>%
- f_new_cases_day(counts_from = update_new_counts)
+  f_new_cases_day(counts_from = update_new_counts)
 ```
 
 ### Total Cases over time
