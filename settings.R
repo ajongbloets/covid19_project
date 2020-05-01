@@ -11,6 +11,9 @@ data.dir <- file.path(root.dir, "data")
 
 ## Constants
 
+si_mean <- 3.96
+si_sd <- 4.75
+
 european <- c(
   "UK", "NO",
   "SE", "FI",

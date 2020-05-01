@@ -25,14 +25,15 @@ source(file.path(lib.dir, "trim.R"))
 source(file.path(lib.dir, "estimate_r.R"))
 
 # load corona watch data
-source(file.path(data.dir, "cw.R"))
+source(file.path(data.dir, "nice.R"))
 
-df.cw <- load_cw()
-df.cw.latest <- df.cw %>%
+df.nice <- load_nice()
+df.nice.latest <- df.nice %>%
   filter(report_date == max(report_date))
+
 ```
 
-**Last timepoint: `r df.cw.latest %>% pull(date) %>% max()`**
+**Last timepoint: `r df.nice.latest %>% pull(date) %>% max()`**
 
 ```{r}
 
@@ -78,14 +79,14 @@ f_cases_day <- function(.d, counts_from = new_counts) {
 ### Cases per Day
 
 ```{r}
-df.cw.latest %>%
+df.nice.latest %>%
   f_new_cases_day()
 ```
 
 ### Total Cases over Time
 
 ```{r}
-df.cw.latest %>%
+df.nice.latest %>%
   f_cases_day()
 ```
 
@@ -106,35 +107,21 @@ f_death_rate <- function(.d) {
       values_from = counts
     ) %>%
     mutate(
-      death_rate_cases = total_deaths / total_cases,
-      death_rate_hospital = total_deaths / total_hospital
+      death_rate = total_deaths / (total_survived + total_deaths)
     )
 }
 ```
 
 ```{r}
-df.cw.latest %>%
+df.nice.latest %>%
   f_death_rate() %>%
-  ggplot(aes(x=date, y=death_rate_cases)) +
+  ggplot(aes(x=date, y=death_rate)) +
   geom_line() +
   geom_point() +
   scale_y_continuous(labels = scales::percent) +
   labs(
     x = "Date",
     y = "Deaths per Case"
-  )
-```
-
-```{r}
-df.cw.latest %>%
-  f_death_rate() %>%
-  ggplot(aes(x=date, y=death_rate_hospital)) +
-  geom_line() +
-  geom_point() +
-  scale_y_continuous(labels = scales::percent) +
-  labs(
-    x = "Date",
-    y = "Deaths per Hospital Patient"
   )
 ```
 
@@ -164,7 +151,8 @@ f_plot_r_over_time <- function( d ) {
 ```
 
 ```{r}
-df.r <- df.cw.latest %>%
+df.r <- df.nice.latest %>%
+  filter(metric == "intake", new_counts > 0) %>%
   group_by(metric) %>%
   nest() %>%
   group_by(metric) %>%
@@ -217,7 +205,7 @@ f_update_probability <- function( .t, .d ) {
 ```
 
 ```{r}
-df.cw.error <- df.cw %>%
+df.nice.error <- df.nice %>%
   group_by(metric, date) %>%
   nest() %>%
   mutate(
@@ -229,7 +217,7 @@ df.cw.error <- df.cw %>%
 ```
 
 ```{r}
-df.cw.error %>%
+df.nice.error %>%
   group_by(metric, age) %>%
   ggplot(aes(x=age, y =perc_error)) +
   facet_wrap(~metric) +
@@ -246,7 +234,7 @@ df.cw.error %>%
 
 ```{r}
 
-df.cw.error.model <- df.cw.error %>%
+df.nice.error.model <- df.nice.error %>%
   group_by(metric, age) %>%
   summarise(
     mean_error = mean(perc_error),
@@ -267,14 +255,14 @@ f_apply <- function(new_counts, .age, .metric, df.model) {
   df.result %>% ungroup() %>% select(-c(metric, age))
 }
 
-df.cw.latest.f <- df.cw.latest %>%
+df.nice.latest.f <- df.nice.latest %>%
   mutate(
     # calculate age as the number of days until today
     age = as.numeric(difftime(max(date), date, units="days")),
     prediction = pmap(
       list(new_counts=new_counts, .age=age, .metric=metric), 
       f_apply,
-      df.model = df.cw.error.model
+      df.model = df.nice.error.model
     )
   ) %>%
   unnest(prediction) %>%
@@ -291,7 +279,7 @@ df.cw.latest.f <- df.cw.latest %>%
 How much did the data change?
 
 ```{r}
-df.cw.latest.f %>%
+df.nice.latest.f %>%
   pivot_longer(
     cols = c(new_counts, update_new_counts),
     names_to = "source",
@@ -315,14 +303,14 @@ df.cw.latest.f %>%
 Only updated data
 
 ```{r}
-df.cw.latest.f %>%
+df.nice.latest.f %>%
   f_new_cases_day(counts_from = update_new_counts)
 ```
 
 ### Total Cases over time
 
 ```{r}
-df.cw.latest.f %>%
+df.nice.latest.f %>%
   f_cases_day(counts_from = update_new_counts)
 ```
 
@@ -334,7 +322,8 @@ Parameters used:
 * `si_sd` = `r si_sd`
 
 ```{r}
-df.r.f <- df.cw.latest.f %>%
+df.r.f <- df.nice.latest.f %>%
+  filter(metric == "intake", new_counts > 0) %>%
   group_by(metric) %>%
   nest() %>%
   group_by(metric) %>%
@@ -358,27 +347,7 @@ df.r.f %>%
 
 ```{r, results='asis'}
 df.r.f %>%
-  filter(metric == "cases") %>%
-  select(date, r_mean, r_ci_lower, r_ci_upper) %>%
-  arrange(desc(date)) %>%
-  kable() %>%
-  kable_styling() %>%
-  scroll_box(width = "100%", height = "200px")
-```
-
-```{r}
-df.r.f %>%
-  filter(metric == "hospital") %>%
-  select(date, r_mean, r_ci_lower, r_ci_upper) %>%
-  arrange(desc(date)) %>%
-  kable() %>%
-  kable_styling() %>%
-  scroll_box(width = "100%", height = "200px")
-```
-
-```{r}
-df.r.f %>%
-  filter(metric == "deaths") %>%
+  filter(metric == "intake") %>%
   select(date, r_mean, r_ci_lower, r_ci_upper) %>%
   arrange(desc(date)) %>%
   kable() %>%
