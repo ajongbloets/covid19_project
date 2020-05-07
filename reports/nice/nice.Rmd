@@ -1,5 +1,5 @@
 ---
-title: "Corona Watch RIVM Data"
+title: "Stichting NICE Data"
 author: "Joeri Jongbloets"
 date: "`r strftime(Sys.Date(), '%B %d %Y')`"
 output: html_document
